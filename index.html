@@ -207,38 +207,116 @@ Helpful</div>
     </div>
   </div>
 </div>
+<!-- TALK TO AGENT MODAL — DUAL MODE (Web Call + Phone Call) -->
+<style>
+  .mode-tabs { display: flex; padding: 4px; background: #f3f4f6; border-radius: 50px; margin-bottom: 20px; }
+  .mode-tab { flex: 1; padding: 8px; border-radius: 50px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; background: transparent; color: #6b7280; transition: all 0.2s; font-family: inherit; }
+  .mode-tab.active { background: white; color: #1a1a2e; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .mode-pane { display: none; }
+  .mode-pane.active { display: block; }
+  .web-call-text { font-size: 14px; color: #4b5563; text-align: center; margin-bottom: 16px; }
+  /* In-call UI */
+  .in-call { text-align: center; padding: 8px 0; }
+  .live-badge { display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 50px; background: #ecfdf5; border: 1px solid #a7f3d0; }
+  .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .live-text { font-size: 12px; font-weight: 700; color: #047857; text-transform: uppercase; letter-spacing: 0.05em; }
+  .call-controls { display: flex; justify-content: center; gap: 12px; margin-top: 24px; }
+  .ctrl-btn { width: 56px; height: 56px; border-radius: 50%; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+  .ctrl-mute { background: #f3f4f6; color: #374151; }
+  .ctrl-mute.muted { background: #fee2e2; color: #dc2626; }
+  .ctrl-end { padding: 0 24px; height: 56px; border-radius: 50px; background: #da3832; color: white; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; border: none; cursor: pointer; font-family: inherit; }
+  .ctrl-end:hover { opacity: 0.9; }
+</style>
 
-<!-- TALK TO AGENT MODAL -->
-<div class="modal-overlay" id="modal" onclick="if(event.target===this)closeModal()">
+<div class="modal-overlay" id="modal">
   <div class="modal-box">
-    <button class="modal-close" onclick="closeModal()">✕</button>
+    <button class="modal-close" id="close-btn" onclick="closeModal()">✕</button>
     <div class="modal-header">
       <div class="modal-icon">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#da3832" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
       </div>
       <div class="modal-title">Talk to Riley</div>
-      <div class="modal-subtitle">Enter your number — Riley will call you within seconds</div>
     </div>
-    <div id="form-container">
-      <form id="call-form" onsubmit="submitForm(event)">
-        <div class="form-group">
-          <label class="form-label">Your Phone Number</label>
-          <input type="tel" id="phone-input" required value="+91" placeholder="+91 98765 43210" class="form-input">
-        </div>
+
+    <!-- Hidden audio container for LiveKit remote audio -->
+    <div id="audio-container" style="display:none"></div>
+
+    <!-- DEFAULT VIEW: tabs + form -->
+    <div id="form-view">
+      <div class="mode-tabs">
+        <button class="mode-tab active" id="tab-web" onclick="switchMode('web')">💻 Talk in Browser</button>
+        <button class="mode-tab" id="tab-phone" onclick="switchMode('phone')">📞 Call My Phone</button>
+      </div>
+
+      <!-- WEB CALL PANE -->
+      <div class="mode-pane active" id="pane-web">
+        <p class="web-call-text">Click below to start a voice call directly from your browser. Make sure your microphone is enabled.</p>
         <div class="form-group">
           <label class="form-label">Transfer Phone Number <span class="optional">(optional)</span></label>
-          <input type="tel" id="transfer-input" placeholder="Transfer to a human agent if needed" class="form-input">
-          <p class="form-hint">Leave blank to disable call transfer</p>
+          <input type="tel" id="web-transfer-input" placeholder="+91 98765 43210" class="form-input">
+          <p class="form-hint">Riley can transfer to a human at this number</p>
         </div>
-        <div id="error-box" style="display:none" class="alert-error"></div>
-        <button type="submit" class="submit-btn" id="submit-btn">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-          <span id="submit-text">Call Me Now</span>
+        <div id="web-error-box" style="display:none" class="alert-error"></div>
+        <button class="submit-btn" id="web-submit-btn" onclick="startWebCall()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+          <span id="web-submit-text">Start Call</span>
         </button>
-        <p class="form-disclaimer">Standard call rates may apply</p>
-      </form>
+      </div>
+
+      <!-- PHONE CALL PANE -->
+      <div class="mode-pane" id="pane-phone">
+        <form onsubmit="submitPhoneForm(event)">
+          <div class="form-group">
+            <label class="form-label">Your Phone Number</label>
+            <input type="tel" id="phone-input" required value="+91" placeholder="+91 98765 43210" class="form-input">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Transfer Phone Number <span class="optional">(optional)</span></label>
+            <input type="tel" id="phone-transfer-input" placeholder="Transfer to human if needed" class="form-input">
+            <p class="form-hint">Leave blank to disable call transfer</p>
+          </div>
+          <div id="phone-error-box" style="display:none" class="alert-error"></div>
+          <button type="submit" class="submit-btn" id="phone-submit-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            <span id="phone-submit-text">Call Me Now</span>
+          </button>
+          <p class="form-disclaimer">Standard call rates may apply</p>
+        </form>
+      </div>
     </div>
-    <div id="success-state" style="display:none" class="success-state">
+
+    <!-- IN-CALL VIEW -->
+    <div id="in-call-view" style="display:none" class="in-call">
+      <div id="connecting-text" style="font-size:14px; color:#6b7280;">Connecting…</div>
+      <div id="live-status" style="display:none">
+        <div class="live-badge">
+          <span class="live-dot"></span>
+          <span class="live-text">LIVE · <span id="call-timer">00:00</span></span>
+        </div>
+        <p style="font-size:14px; color:#6b7280; margin-top:12px;">You're talking to Riley</p>
+      </div>
+      <div class="call-controls">
+        <button class="ctrl-btn ctrl-mute" id="mute-btn" onclick="toggleMute()" aria-label="Mute">
+          <svg id="mic-on" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+          <svg id="mic-off" style="display:none" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+        </button>
+        <button class="ctrl-end" onclick="endCall()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(135deg)"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+          End Call
+        </button>
+      </div>
+    </div>
+
+    <!-- ENDED VIEW -->
+    <div id="ended-view" style="display:none" class="success-state">
+      <div class="success-title">Call ended</div>
+      <div class="success-subtitle">Duration: <span id="ended-duration">00:00</span></div>
+      <button onclick="closeModal()" style="margin-top:16px; padding:8px 24px; border-radius:50px; border:1px solid #e5e7eb; background:white; cursor:pointer; font-size:14px; font-weight:600; font-family:inherit;">Close</button>
+    </div>
+
+    <!-- PHONE SUCCESS VIEW -->
+    <div id="phone-success-view" style="display:none" class="success-state">
       <div class="success-icon">
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
       </div>
@@ -248,56 +326,203 @@ Helpful</div>
   </div>
 </div>
 
+<!-- LiveKit client (UMD bundle) -->
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2.18.8/dist/livekit-client.umd.min.js"></script>
+
 <script>
-// ====== CONFIG ======
-const NURIX_API_URL = 'https://agentx-us.nurixlabs.tech/voice/outbound-call';
+// ============ CONFIG ============
+const NURIX_OUTBOUND_URL = 'https://agentx-us.nurixlabs.tech/voice/outbound-call';
+const NURIX_WEB_CALL_URL = 'https://agentx-us.nurixlabs.tech/voice/web/call';
 const WORKSPACE_ID = '8df3c72c-12a4-4b2b-8f6c-c15689e2cb8a';
 const AGENT_ID = '7b186b5a-8e86-4eef-a8e7-092afdf61391';
 
-// ====== UI HELPERS ======
+// ============ STATE ============
+let livekitRoom = null;
+let callTimer = null;
+let callDuration = 0;
+let isMuted = false;
+
+// ============ UI HELPERS ============
 function selectCard(el) {
   document.querySelectorAll('.usecase-card').forEach(c => c.classList.remove('selected'));
   el.classList.add('selected');
+}
+function uuid() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+function fmtDuration(s) {
+  const m = String(Math.floor(s / 60)).padStart(2, '0');
+  const sec = String(s % 60).padStart(2, '0');
+  return m + ':' + sec;
+}
+function showView(viewId) {
+  ['form-view','in-call-view','ended-view','phone-success-view'].forEach(id => {
+    document.getElementById(id).style.display = (id === viewId) ? (id === 'in-call-view' ? 'block' : 'block') : 'none';
+  });
 }
 function openModal() {
   document.getElementById('modal').classList.add('open');
   resetModal();
 }
 function closeModal() {
+  endCall();
   document.getElementById('modal').classList.remove('open');
+  resetModal();
 }
 function resetModal() {
-  document.getElementById('form-container').style.display = 'block';
-  document.getElementById('success-state').style.display = 'none';
-  document.getElementById('error-box').style.display = 'none';
-  document.getElementById('submit-btn').disabled = false;
-  document.getElementById('submit-text').textContent = 'Call Me Now';
+  showView('form-view');
+  switchMode('web');
+  document.getElementById('web-error-box').style.display = 'none';
+  document.getElementById('phone-error-box').style.display = 'none';
+  document.getElementById('web-submit-btn').disabled = false;
+  document.getElementById('web-submit-text').textContent = 'Start Call';
+  document.getElementById('phone-submit-btn').disabled = false;
+  document.getElementById('phone-submit-text').textContent = 'Call Me Now';
+  document.getElementById('connecting-text').style.display = 'block';
+  document.getElementById('live-status').style.display = 'none';
 }
-function showError(msg) {
-  const box = document.getElementById('error-box');
-  box.textContent = msg;
-  box.style.display = 'block';
+function switchMode(mode) {
+  document.getElementById('tab-web').classList.toggle('active', mode === 'web');
+  document.getElementById('tab-phone').classList.toggle('active', mode === 'phone');
+  document.getElementById('pane-web').classList.toggle('active', mode === 'web');
+  document.getElementById('pane-phone').classList.toggle('active', mode === 'phone');
 }
-function showSuccess() {
-  document.getElementById('form-container').style.display = 'none';
-  document.getElementById('success-state').style.display = 'block';
-  setTimeout(closeModal, 2800);
+function showWebError(msg) {
+  const box = document.getElementById('web-error-box');
+  box.textContent = msg; box.style.display = 'block';
+}
+function showPhoneError(msg) {
+  const box = document.getElementById('phone-error-box');
+  box.textContent = msg; box.style.display = 'block';
 }
 
-// ====== API CALL ======
-async function submitForm(e) {
+// ============ WEB CALL ============
+async function startWebCall() {
+  const btn = document.getElementById('web-submit-btn');
+  const text = document.getElementById('web-submit-text');
+  const errBox = document.getElementById('web-error-box');
+  errBox.style.display = 'none';
+  btn.disabled = true;
+  text.textContent = 'Connecting…';
+
+  const transferNumber = document.getElementById('web-transfer-input').value.trim();
+
+  try {
+    const res = await fetch(NURIX_WEB_CALL_URL, {
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+        'user-id': uuid(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        agent_id: AGENT_ID,
+        overide_previous_context: false,
+        custom_dynamic_variables_config: { transfer_phone_number: transferNumber },
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(err || ('HTTP ' + res.status));
+    }
+    const data = await res.json();
+    const { serverUrl, participantToken } = data;
+
+    // Switch to in-call view
+    showView('in-call-view');
+    document.getElementById('connecting-text').style.display = 'block';
+    document.getElementById('live-status').style.display = 'none';
+    document.getElementById('close-btn').style.display = 'none';
+
+    // Connect to LiveKit
+    const LK = window.LivekitClient;
+    livekitRoom = new LK.Room({ adaptiveStream: true, dynacast: true });
+
+    livekitRoom.on(LK.RoomEvent.TrackSubscribed, function(track) {
+      if (track.kind === LK.Track.Kind.Audio) {
+        const el = track.attach();
+        el.autoplay = true;
+        document.getElementById('audio-container').appendChild(el);
+      }
+    });
+    livekitRoom.on(LK.RoomEvent.Disconnected, function() {
+      stopCallTimer();
+    });
+
+    await livekitRoom.connect(serverUrl, participantToken);
+    await livekitRoom.localParticipant.setMicrophoneEnabled(true);
+
+    // Show LIVE status
+    document.getElementById('connecting-text').style.display = 'none';
+    document.getElementById('live-status').style.display = 'block';
+    startCallTimer();
+  } catch (err) {
+    btn.disabled = false;
+    text.textContent = 'Start Call';
+    let msg = (err && err.message) ? err.message : 'Failed';
+    if (msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('cors')) {
+      msg = 'Browser blocked the request (CORS). Nurix needs to allow this origin.';
+    }
+    showWebError(msg);
+    showView('form-view');
+    document.getElementById('close-btn').style.display = 'flex';
+  }
+}
+
+async function toggleMute() {
+  if (!livekitRoom) return;
+  isMuted = !isMuted;
+  await livekitRoom.localParticipant.setMicrophoneEnabled(!isMuted);
+  document.getElementById('mute-btn').classList.toggle('muted', isMuted);
+  document.getElementById('mic-on').style.display = isMuted ? 'none' : 'block';
+  document.getElementById('mic-off').style.display = isMuted ? 'block' : 'none';
+}
+
+function endCall() {
+  if (livekitRoom) {
+    try { livekitRoom.disconnect(); } catch (e) {}
+    livekitRoom = null;
+  }
+  document.getElementById('audio-container').innerHTML = '';
+  if (callTimer && document.getElementById('in-call-view').style.display === 'block') {
+    document.getElementById('ended-duration').textContent = fmtDuration(callDuration);
+    showView('ended-view');
+    document.getElementById('close-btn').style.display = 'flex';
+  }
+  stopCallTimer();
+  isMuted = false;
+}
+
+function startCallTimer() {
+  callDuration = 0;
+  if (callTimer) clearInterval(callTimer);
+  callTimer = setInterval(function() {
+    callDuration += 1;
+    document.getElementById('call-timer').textContent = fmtDuration(callDuration);
+  }, 1000);
+}
+function stopCallTimer() {
+  if (callTimer) { clearInterval(callTimer); callTimer = null; }
+}
+
+// ============ PHONE CALL ============
+async function submitPhoneForm(e) {
   e.preventDefault();
   const phone = document.getElementById('phone-input').value.trim();
-  const transfer = document.getElementById('transfer-input').value.trim();
-  const btn = document.getElementById('submit-btn');
-  const text = document.getElementById('submit-text');
+  const transfer = document.getElementById('phone-transfer-input').value.trim();
+  const btn = document.getElementById('phone-submit-btn');
+  const text = document.getElementById('phone-submit-text');
+  const errBox = document.getElementById('phone-error-box');
 
-  document.getElementById('error-box').style.display = 'none';
+  errBox.style.display = 'none';
   btn.disabled = true;
   text.textContent = 'Connecting…';
 
   try {
-    const res = await fetch(NURIX_API_URL, {
+    const res = await fetch(NURIX_OUTBOUND_URL, {
       method: 'POST',
       headers: {
         'accept': 'application/json',
@@ -311,24 +536,27 @@ async function submitForm(e) {
         webhook_customer_id: phone,
       }),
     });
-
     if (!res.ok) {
       const err = await res.text();
       throw new Error(err || ('HTTP ' + res.status));
     }
-
-    showSuccess();
+    showView('phone-success-view');
+    setTimeout(closeModal, 2800);
   } catch (err) {
     btn.disabled = false;
     text.textContent = 'Call Me Now';
-    const msg = (err && err.message) ? err.message : 'Failed to start call';
+    let msg = (err && err.message) ? err.message : 'Failed';
     if (msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('cors')) {
-      showError('Browser blocked the call due to CORS. The Nurix API needs to whitelist this origin, or use a backend proxy.');
-    } else {
-      showError(msg);
+      msg = 'Browser blocked the request (CORS).';
     }
+    showPhoneError(msg);
   }
 }
+
+// Click-outside to close (only when not in call)
+document.getElementById('modal').addEventListener('click', function(e) {
+  if (e.target.id === 'modal' && !livekitRoom) closeModal();
+});
 </script>
 </body>
 </html>
